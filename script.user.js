@@ -1,22 +1,23 @@
 // ==UserScript==
 // @name         浙工大-正方教务系统导出课程表
 // @namespace    https://github.com/xlle-er/gdjwkcb_ical
-// @version      4.1.4
+// @version      4.1.5
 // @description  通过对正方教务系统的课表页面的解析，实现导出一个适用于大部分 ics 日历的文件
 // @author       Xiaolele_er & 1208nn (修改自 31415926535x )
 // @supportURL   https://github.com/xlle-er/gdjwkcb_ical/issues
 // @license      MIT
 // @include      *://www.gdjw.zjut.edu.cn/jwglxt*
-// @run-at       document-start
+// @run-at       document-end
 // @downloadURL  https://github.com/xlle-er/gdjwkcb_ical/raw/main/script.user.js
 // @updateURL    https://github.com/xlle-er/gdjwkcb_ical/raw/main/script.user.js
 // ==/UserScript==
 
-// 学期周数 默认为 16
-var weeks = 16
+//#region 全局配置
+// 学期周数，默认为 16
+var semesterWeeks = 16;
 
 // 课堂时间表
-var classtime = {
+var classTimeTable = {
     '1': { 'start': '0800', 'end': '0845' },
     '2': { 'start': '0855', 'end': '0940' },
     '3': { 'start': '0955', 'end': '1040' },
@@ -30,631 +31,407 @@ var classtime = {
     '11': { 'start': '1925', 'end': '2010' },
     '12': { 'start': '2025', 'end': '2110' }
 };
-// 根据自己学校教务系统的网址修改，应该对于新版教务系统的地址都是一样的，故只需修改上面 include中的教务系统的地址即可
-var ClassScheduleToICSURL = "kbcx/xskbcx_cxXskbcxIndex.html"; // 学生课表查询页面，将该学期的课程信息导出为ics
-var ExamScheduleToICSURL = "kwgl/kscx_cxXsksxxIndex.html"; // 考试信息查询页面，将该学期的考试信息导出为ics
-var StudentEvalutionURL = "xspjgl/kcgcpj_cxKcgcpjxxIndex.html"; // 学生评教页面
 
-var setTimeout_ = 4000; // 设置脚本实际运行的开始时间，网络不好建议时间稍长，1000等于1s
+// 根据自己学校教务系统的网址修改，应该对于新版教务系统的地址都是一样的，故只需修改上面 include 中的教务系统地址即可
+var classScheduleToICSURL = "kbcx/xskbcx_cxXskbcxIndex.html"; // 学生课表查询页面，将该学期的课程信息导出为 ics
+var examScheduleToICSURL = "kwgl/kscx_cxXsksxxIndex.html";   // 考试信息查询页面，将该学期的考试信息导出为 ics
+var studentEvaluationURL = "xspjgl/kcgcpj_cxKcgcpjxxIndex.html"; // 学生评教页面
+
+var startDelay = 4000; // 脚本实际开始运行的延迟时间，网络不好建议调大，1000 等于 1s
+
+//#endregion
 
 
+//#region 入口
 (function () {
     'use strict';
 
     console.log("Fucking ZhengFang...");
-    unsafeWindow.addEventListener("load", main);
+    window.addEventListener("load", () => {
+        const url = window.location.href;
+        if (url.includes(classScheduleToICSURL)) {
+            classScheduleToICS();
+        } else if (url.includes(examScheduleToICSURL)) {
+            examScheduleToICS();
+        } else if (url.includes(studentEvaluationURL)) {
+            $("#btn_yd").on("click", () => setTimeout(studentEvaluation, startDelay));
+        }
+    });
 })();
 
-function main() {
-    var windowURL = window.location.href;
-    if (windowURL.indexOf(ClassScheduleToICSURL) != -1) {
-        ClassScheduleToICS();
-    } else if (windowURL.indexOf(ExamScheduleToICSURL) != -1) {
-        ExamScheduleToICS();
-    } else if (windowURL.indexOf(StudentEvalutionURL) != -1) {
-        // StudentEvalution();
-        // unsafeWindow.addEventListener("load", StudentEvalution);
-        document.getElementById("btn_yd").onclick = function () {
-            window.setTimeout(StudentEvalution, setTimeout_);
-        }
-    }
-}
+//#endregion
 
-function ClassScheduleToICS() {
-    console.log("ClassScheduleToICS");
-    // 在课表上方创建一个点击按钮
-    // --------------------------------------------------------------------------
-    // unsafeWindow.addEventListener ("load", pageFullyLoaded);
-    pageFullyLoaded();
-    //加载完成后运行
-    function pageFullyLoaded() {
-        // 加载正方 UI WdatePicker 脚本和样式
-        let script = document.createElement("script");
-        script.type = "text/javascript";
-        script.src = "/zftal-ui-v5-1.0.2/assets/plugins/My97DatePicker/WdatePicker.js?ver=29539157";
-        document.head.appendChild(script);
 
-        let link = document.createElement("link");
-        link.href = "/zftal-ui-v5-1.0.2/assets/plugins/My97DatePicker/skin/WdatePicker.css";
-        link.rel = "stylesheet";
-        link.type = "text/css";
-        document.head.appendChild(link);
+//#region 课程表导出
+function classScheduleToICS() {
+    console.log("classScheduleToICS");
 
-        let firstMondayLabel = document.createElement("label");
-        let label = document.createElement("span");
-        label.className = "bigger-120 glyphicon glyphicon-time";
-        firstMondayLabel.appendChild(label);
-        firstMondayLabel.append(" 开学首个星期一");
-        firstMondayLabel.style.float = "left";
+    //#region 添加相应按钮
+    // 加载正方 UI WdatePicker 脚本和样式
+    $("head").append($("<script>", { type: "text/javascript", src: "/zftal-ui-v5-1.0.2/assets/plugins/My97DatePicker/WdatePicker.js?ver=29539157" }));
+    $("head").append($("<link>", { href: "/zftal-ui-v5-1.0.2/assets/plugins/My97DatePicker/skin/WdatePicker.css", rel: "stylesheet", type: "text/css" }));
 
-        let firstMondaySelector = document.createElement("input");
-        firstMondaySelector.type = "text";
-        firstMondaySelector.className = "form-control";
-        firstMondaySelector.style.width = "150px";
-        firstMondaySelector.style.display = "inline-block";
-        firstMondaySelector.style.float = "left";
-        firstMondaySelector.onfocus = function () {
+    let $firstMondayLabel = $("<label>").css("float", "left")
+        .append($("<span>").addClass("bigger-120 glyphicon glyphicon-time"))
+        .append(" 开学首个星期一");
+
+    let $firstMondaySelector = $("<input>", { type: "text" })
+        .addClass("form-control")
+        .css({ width: "150px", display: "inline-block", float: "left" })
+        .on("focus", function () {
             unsafeWindow.WdatePicker({ dateFmt: 'yyyy-MM-dd', readOnly: true, lang: 'zh-cn' });
-        };
-        firstMondaySelector.value = (d => (d.setDate(d.getDate() - d.getDay() + 1), d))(new Date()).toISOString().split('T')[0]; // 默认为本周的星期一
+        })
+        .val((d => (d.setDate(d.getDate() - d.getDay() + 1), d))(new Date()).toISOString().split('T')[0]); // 默认为本周的星期一
 
-        // 添加周数事件开关按钮
-        let weekToggleBtn = document.createElement("button");
-        weekToggleBtn.className = "btn btn-default btn-primary"; // 默认启用
-        weekToggleBtn.style.float = "left";
-        weekToggleBtn.onclick = () => weekToggleBtn.classList.toggle("btn-primary");
-        label = document.createElement("span");
-        label.className = "bigger-120 glyphicon glyphicon-cog";
-        weekToggleBtn.append(label);
-        weekToggleBtn.append(" 在导出的课表内显示周数");
+    let $weekToggleBtn = $("<button>").addClass("btn btn-default btn-primary") // 默认启用
+        .css("float", "left")
+        .on("click", function () { $(this).toggleClass("btn-primary"); })
+        .append($("<span>").addClass("bigger-120 glyphicon glyphicon-cog"))
+        .append(" 在导出的课表内显示周数");
 
-        let exportBtn = document.createElement("button");
-        exportBtn.className = "btn btn-default";
-        exportBtn.style.float = "left";
-        exportBtn.onclick = function () {
-            startDate = firstMondaySelector.value;
-            generateCalendar(parseCourses(parseTable()), weekToggleBtn.classList.contains("btn-primary")); // 嘿嘿。。
-            alert("ICS 文件已经生成，可以导入到您所使用的日历文件。\n您可以按 Ctrl+J 快捷键来查看浏览器下载或打开系统下载目录查看导出的文件。\nGoogle Calendar需要自行设置课程的颜色。");
-        }
-        label = document.createElement("span");
-        label.className = "bigger-120 glyphicon glyphicon-export";
-        exportBtn.append(label);
-        exportBtn.append(" 导出课表");
+    let $exportBtn = $("<button>").addClass("btn btn-default")
+        .css("float", "left")
+        .on("click", function () {
+            startDate = $firstMondaySelector.val();
+            generateCalendar(parseCourses(parseTable()), $weekToggleBtn.hasClass("btn-primary"));
+            alert("ICS 文件已经生成，可以导入到您所使用的日历文件。\n您可以按 Ctrl+J 快捷键来查看浏览器下载或打开系统下载目录查看导出的文件。\nGoogle Calendar 需要自行设置课程的颜色。");
+        })
+        .append($("<span>").addClass("bigger-120 glyphicon glyphicon-export"))
+        .append(" 导出课表");
 
-        let div = document.getElementsByClassName("btn-toolbar pull-right")[0];
-        div.appendChild(firstMondayLabel);
-        div.appendChild(firstMondaySelector);
-        div.appendChild(weekToggleBtn);
-        div.appendChild(exportBtn);
-    }
-    // --------------------------------------------------------------------------
+    $(".btn-toolbar.pull-right").first().append($firstMondayLabel, $firstMondaySelector, $weekToggleBtn, $exportBtn);
+
+    //#endregion
 
     // 本学期设定的开始日期
     var startDate;
 
-    // 全局变量Week的双引射
-    // --------------------------------------------------------------------------
-    var Week;
-    (function (Week) {
-        Week[Week["Monday"] = 1] = "Monday";
-        Week[Week["TuesDay"] = 2] = "TuesDay";
-        Week[Week["Wednesday"] = 3] = "Wednesday";
-        Week[Week["ThursDay"] = 4] = "ThursDay";
-        Week[Week["Friday"] = 5] = "Friday";
-        Week[Week["Saturday"] = 6] = "Saturday";
-        Week[Week["Sunday"] = 7] = "Sunday";
-    })(Week || (Week = {}));
-    // --------------------------------------------------------------------------
+    // Week 双向映射（数字 ↔ 英文星期名）
+    const Week = { Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6, Sunday: 7 };
+    Object.keys(Week).forEach(k => Week[Week[k]] = k);
 
-
-    // 从页面中获取课程的 div, 返回对应的星期以及div数组
-    // --------------------------------------------------------------------------
+    // 从页面中获取课程的 div，返回对应星期及 div 数组
     function parseTable() {
-        let table = document.getElementById("kbgrid_table_0");
-        // console.log(table);
-        // let tds = table.getElementsByTagName("td");  // 因为 getElementsByTagName() 方法没有foreach 故使用 queryselectorall()
-        let tds = table.querySelectorAll("td");
-        // console.log(tds);
-        let week = new Array();
-        let divs = new Array();
-        tds.forEach(element => {
-            if (element.hasAttribute("id")) {
-                if (element.hasChildNodes()) {
-                    let div = Array.from(element.getElementsByTagName("div"));
-                    // let div = element.querySelectorAll("div");
-                    divs = divs.concat(div);
-                    let wk = Week[element.getAttribute("id")[0]];
-                    for (let i = 0; i < div.length; ++i) {
-                        week.push(wk);
-                    }
-                }
+        let week = [], divs = [];
+        $("#kbgrid_table_0 td[id]").each(function () {
+            let $td = $(this);
+            if ($td.children().length > 0) {
+                let div = $td.find("div").toArray();
+                divs = divs.concat(div);
+                let wk = Week[$td.attr("id")[0]];
+                for (let i = 0; i < div.length; ++i) week.push(wk);
             }
         });
-        return { week: week, divs: divs };
+        return { week, divs };
     }
-    // --------------------------------------------------------------------------
 
-
-
-
-    // --------------------------------------------------------------------------
-    // 全局变量 课程信息类
+    // 课程信息类
     class Course {
         constructor(course) {
-            if (course) {
-                this.name = course.name; // 课程名称
-                this.week = course.week; // 该课程具体是星期几
-                this.info = course.info; // 该课程的一个这个时段的信息
-                this.startTime = course.startTime; // 该课程的开始上课时间
-                this.endTime = course.endTime;
-                this.startWeek = course.startWeek; // 该课程的持续上课的起始周，为一个数组
-                this.endWeek = course.endWeek;
-                this.isSingleOrDouble = course.isSingleOrDouble;
-                // 该课程是否为单双周（间隔上课），间隔为 2
-                this.location = course.location; // 该课程的上课地点
-                this.teacher = course.teacher; // 该课程的任课老师
-            }
+            if (course) Object.assign(this, course);
         }
     }
-    // --------------------------------------------------------------------------
 
-
-    // 获取所有的课程信息，存放到一个 courses 数组中
-    // --------------------------------------------------------------------------
+    // 解析所有课程信息，存入 courses 数组
     function parseCourses(data) {
-        var courses = new Array();
+        var courses = [];
         for (let i = 0; i < data.divs.length; ++i) {
             let course = new Course();
             course.week = data.week[i];
-            course.name = data.divs[i].getElementsByTagName("span")[0].getElementsByTagName("font")[0].innerText;
-            course.name = course.name.substr(0, course.name.length - 1);
-            data.divs[i].querySelectorAll("p").forEach(p => {
-                if (p.getElementsByTagName("span")[0].getAttribute("title") == "节/周") {
-                    // 进行起始周数以及持续时间的解析
-                    (function (str = p.getElementsByTagName("font")[1].innerText) {
-                        course.info = $.trim(str);
-                        // console.log(str);
-                        let time = str.substring(str.indexOf("(") + 1, str.indexOf(")") + 1 - 1);
-                        let wk = str.substring(str.indexOf(")") + 1, str.length).split(",");
-                        // console.log(time);
-                        // console.log(wk);
-
-                        course.startTime = parseInt(time.substring(0, time.indexOf("-")));
-                        course.endTime = parseInt(time.substring(time.indexOf("-") + 1, time.indexOf("节")));
-
-
-                        course.isSingleOrDouble = new Array();
-                        course.startWeek = new Array();
-                        course.endWeek = new Array();
-                        wk.forEach(w => {
-                            if (w.indexOf("单") != -1 || w.indexOf("双") != -1) {
-                                course.isSingleOrDouble.push(2);
-                            } else {
-                                course.isSingleOrDouble.push(1);
-                            }
-
-                            let startWeek, endWeek;
-                            if (w.indexOf("-") == -1) {
-                                startWeek = endWeek = parseInt(w.substring(0, w.indexOf("周")));
-                            } else {
-                                startWeek = parseInt(w.substring(0, w.indexOf("-")));
-                                endWeek = parseInt(w.substring(w.indexOf("-") + 1, w.indexOf("周")));
-                            }
-                            course.startWeek.push(startWeek);
-                            course.endWeek.push(endWeek);
-                        });
-                    })();
-
-                } else if (p.getElementsByTagName("span")[0].getAttribute("title") == "上课地点") {
-                    course.location = $.trim(p.getElementsByTagName("font")[1].innerText);
-                } else if (p.getElementsByTagName("span")[0].getAttribute("title") == "教师") {
-                    course.teacher = $.trim(p.getElementsByTagName("font")[1].innerText);
+            let $div = $(data.divs[i]);
+            course.name = $div.find("span:first font:first").text().slice(0, -1);
+            $div.find("p").each(function () {
+                let $p = $(this);
+                let title = $p.find("span:first").attr("title");
+                let val = $.trim($p.find("font").eq(1).text());
+                if (title == "节/周") {
+                    // 解析起始周数及持续节次
+                    course.info = val;
+                    let time = val.substring(val.indexOf("(") + 1, val.indexOf(")"));
+                    let wk = val.substring(val.indexOf(")") + 1).split(",");
+                    course.startTime = parseInt(time.substring(0, time.indexOf("-")));
+                    course.endTime = parseInt(time.substring(time.indexOf("-") + 1, time.indexOf("节")));
+                    course.isSingleOrDouble = [];
+                    course.startWeek = [];
+                    course.endWeek = [];
+                    wk.forEach(w => {
+                        course.isSingleOrDouble.push(w.indexOf("单") != -1 || w.indexOf("双") != -1 ? 2 : 1);
+                        let startWeek, endWeek;
+                        if (w.indexOf("-") == -1) {
+                            startWeek = endWeek = parseInt(w.substring(0, w.indexOf("周")));
+                        } else {
+                            startWeek = parseInt(w.substring(0, w.indexOf("-")));
+                            endWeek = parseInt(w.substring(w.indexOf("-") + 1, w.indexOf("周")));
+                        }
+                        course.startWeek.push(startWeek);
+                        course.endWeek.push(endWeek);
+                    });
+                } else if (title == "上课地点") {
+                    course.location = val;
+                } else if (title == "教师 ") {
+                    // 注意教师后面有一个空格，可能是正方系统为了对齐做的格式调整，不能直接写 "教师"
+                    course.teacher = val;
+                } else if (title == "教学班名称") {
+                    course.className = val;
                 }
             });
-            // console.log(course);
             courses.push(course);
         }
         return courses;
     }
-    // --------------------------------------------------------------------------
 
-
-
-
-    // --------------------------------------------------------------------------
-    // 通过节次确定时间， 默认每天上午8点上课，每节课两小时（无休息时间），下午2点上课
-    function getTime(num, StartOrEnd) {
-        if (StartOrEnd == 0) {
-            time = classtime[num]["start"]
-        } else {
-            time = classtime[num]["end"]
-        }
-        return time + '00';
+    // 根据节次获取具体时间字符串
+    function getTime(num, startOrEnd) {
+        return classTimeTable[num][startOrEnd == 0 ? "start" : "end"] + '00';
     }
 
     function getFixedLen(s, len) {
-        if (s.length < len) {
-            return getFixedLen("0" + s, len);
-        } else if (s.length > len) {
-            return s.slice(0, len);
-        } else {
-            return s;
-        }
+        if (s.length < len) return getFixedLen("0" + s, len);
+        return s.slice(0, len);
     }
-    // 通过周数获得具体的日期（相对学期开始的那一周）
+
+    // 根据周数和星期获取具体日期（相对学期开始的那一周）
     function getDate(num, wk) {
         let date = new Date(startDate.toString());
         date.setDate(date.getDate() + (num - 1) * 7 + Week[wk] - 1);
-        let res = "";
-        res += getFixedLen(date.getUTCFullYear().toString(), 4);
-        res += getFixedLen((date.getUTCMonth() + 1).toString(), 2);
-        res += getFixedLen(date.getUTCDate().toString(), 2);
-        res += "T";
-        return res;
+        return getFixedLen(date.getUTCFullYear().toString(), 4)
+            + getFixedLen((date.getUTCMonth() + 1).toString(), 2)
+            + getFixedLen(date.getUTCDate().toString(), 2)
+            + "T";
     }
-    // --------------------------------------------------------------------------
 
-    // --------------------------------------------------------------------------
-    // 日历的生成，由处理过的课程信息来得到一个没有处理行长的ics
+    // 由解析后的课程信息生成 ICS 日历对象
     function generateCalendar(courses, enableWeekEvents) {
         let res = new ICS();
-
-        // 将每一个课程信息转化为事件 VEVENT 并添加一个提醒
         console.log(courses);
         courses.forEach(course => {
             for (let i = 0; i < course.isSingleOrDouble.length; ++i) {
-                let e = new ICSEvent("" + getDate(course.startWeek[i], course.week) + getTime(course.startTime, 0),
-                    "" + getDate(course.startWeek[i], course.week) + getTime(course.endTime, 1),
-                    // "" + course.name + " " + course.location + " " + course.teacher + " " + course.info);
-                    "" + course.name + " " + course.location.substring(5) + " " + course.info.substring(1, 5),
-                    "" + course.location,
-                    "" + course.info.substring(1, 5) + " " + course.teacher);
+                let classTime = course.info.substring(course.info.indexOf("(") + 1, course.info.indexOf(")"));
+                let e = new ICSEvent(
+                    getDate(course.startWeek[i], course.week) + getTime(course.startTime, 0),
+                    getDate(course.startWeek[i], course.week) + getTime(course.endTime, 1),
+                    course.name,
+                    course.location,
+                    `${course.teacher} ${classTime} ${course.className}`
+                );
                 e.setRRULE("WEEKLY", res.Calendar.WKST,
-                    "" + (course.endWeek[i] - course.startWeek[i] + course.isSingleOrDouble[i]) / course.isSingleOrDouble[i],
-                    "" + course.isSingleOrDouble[i],
-                    "" + course.week.substr(0, 2).toUpperCase());
+                    (course.endWeek[i] - course.startWeek[i] + course.isSingleOrDouble[i]) / course.isSingleOrDouble[i],
+                    course.isSingleOrDouble[i],
+                    course.week.substr(0, 2).toUpperCase());
                 res.pushEvent(e);
             }
         });
 
-        // 建立一个周数事件，持续 16 周（根据开关状态决定是否启用）
-        if (enableWeekEvents === true) {
-            (function () {
-                for (let i = 1; i <= weeks; ++i) {
-                    let e = new ICSEvent("" + getDate(i, Week[1]) + "060000",
-                        "" + getDate(i, Week[1]) + "070000",
-                        "" + "第" + i + "周");
-                    res.pushEvent(e);
-                }
-            })();
-        }
-
-        res.pushCalendarEnd();
-        res.exportIcs();
-    }
-    // --------------------------------------------------------------------------
-}
-
-// 导出考试信息
-function ExamScheduleToICS() {
-    console.log("ExamScheduleToICS");
-
-    pageFullyLoaded();
-    //加载完成后运行
-    function pageFullyLoaded() {
-        let div = document.getElementsByClassName("col-sm-12")[1];
-        let btn = document.createElement("button");
-        btn.className = "btn btn-primary btn-sm";
-        btn.innerText = "导出 ICS 文件";
-
-        div.appendChild(btn);
-
-
-        btn.onclick = function () {
-            generateCalendar();
-            alert("ics文件已经生成，请导入到您所使用的日历文件；（Google Calendar需要自行设置课程的颜色。。。）");
-        }
-
-        document.getElementById("search_go").click();
-    }
-
-    function generateCalendar() {
-        let table = document.getElementById("tabGrid");
-        let trs = table.getElementsByTagName("tr");
-
-        class EXAM {
-            constructor(e) {
-                if (e) {
-                    this.course = e.course; // 课程名
-                    this.teacher = e.teacher; // 教师
-                    this.examNmae = e.examNmae; // 考试名称：期中还是期末
-                    this.timeS = e.timeS; // 考试时间
-                    this.timeT = e.timeE; // 考试时间
-                    this.location = e.location; // 考试地点组成： 考试地点、考试校区、座位号
-                }
+        // 建立周数标记事件，持续 semesterWeeks 周（根据开关状态决定是否启用）
+        if (enableWeekEvents) {
+            for (let i = 1; i <= semesterWeeks; ++i) {
+                res.pushEvent(new ICSEvent(getDate(i, Week[1]) + "060000", getDate(i, Week[1]) + "070000", "第" + i + "周"));
             }
         }
-        let exams = new Array();
-        for (let i = 1; i < trs.length; ++i) {
-            let tds = trs[i].getElementsByTagName("td");
-            let exam = new EXAM();
-            exam.loction = "";
-            trs[i].querySelectorAll("td").forEach(tr => {
-                let attr = tr.getAttribute("aria-describedby");
+
+        res.exportIcs();
+    }
+}
+
+//#endregion
+
+
+//#region 考试信息导出
+function examScheduleToICS() {
+    console.log("examScheduleToICS");
+
+    $(".col-sm-12").eq(1).append(
+        $("<button>").addClass("btn btn-primary btn-sm").text("导出 ICS 文件")
+            .on("click", function () {
+                generateCalendar();
+                alert("ICS 文件已经生成，可以导入到您所使用的日历文件。\n您可以按 Ctrl+J 快捷键来查看浏览器下载或打开系统下载目录查看导出的文件。\nGoogle Calendar 需要自行设置课程的颜色。");
+            })
+    );
+    $("#search_go").trigger("click");
+
+    function generateCalendar() {
+        class Exam {
+            constructor(e) {
+                if (e) Object.assign(this, e);
+            }
+        }
+        let exams = [];
+        $("#tabGrid tr:gt(0)").each(function () {
+            let exam = new Exam();
+            $(this).find("td").each(function () {
+                let $td = $(this);
+                let attr = $td.attr("aria-describedby");
+                let text = $td.text();
                 if (attr == "tabGrid_kcmc") {
                     // 课程名称
-                    exam.course = tr.innerText;
+                    exam.course = text;
                 } else if (attr == "tabGrid_jsxx") {
                     // 教师
-                    exam.teacher = tr.innerText.substring(tr.innerText.indexOf("/") + 1, tr.innerText.length);
+                    exam.teacher = text.substring(text.indexOf("/") + 1);
                 } else if (attr == "tabGrid_ksmc") {
                     // 考试类型
-                    exam.examNmae = tr.innerText;
+                    exam.examName = text;
                 } else if (attr == "tabGrid_kssj") {
                     // 考试时间
-                    let time = tr.innerText;
-                    let date = "" + time[0] + time[1] + time[2] + time[3] + time[5] + time[6] + time[8] + time[9] + "T";
-                    exam.timeS = date + time[11] + time[12] + time[14] + time[15] + "00";
-                    exam.timeE = date + time[17] + time[18] + time[20] + time[21] + "00";
+                    let date = text.slice(0, 4) + text.slice(5, 7) + text.slice(8, 10) + "T";
+                    exam.timeS = date + text.slice(11, 13) + text.slice(14, 16) + "00";
+                    exam.timeE = date + text.slice(17, 19) + text.slice(20, 22) + "00";
                 } else if (attr == "tabGrid_cdmc") {
                     // 考试地点
-                    exam.location = tr.innerText;
+                    exam.location = text;
                 } else if (attr == "tabGrid_cdxqmc") {
                     // 校区
-                    exam.location += " " + tr.innerText;
+                    exam.location += " " + text;
                 } else if (attr == "tabGrid_zwh") {
                     // 座位号
-                    exam.location += "  " + tr.innerText;
+                    exam.location += "  " + text;
                 }
-                // 可以根据自己学校和自己的喜好添加你想要的信息
+                // 可以根据自己学校和喜好添加更多字段
             });
             exams.push(exam);
-        }
+        });
         console.log(exams);
         let ics = new ICS();
         exams.forEach(ex => {
-            let e = new ICSEvent("" + ex.timeS, "" + ex.timeE, "" + ex.course + " " + ex.examNmae + " " + ex.teacher + " " + ex.location);
-            ics.pushEvent(e);
+            ics.pushEvent(new ICSEvent(ex.timeS, ex.timeE, ex.course + " " + ex.examName + " " + ex.teacher + " " + ex.location));
         });
-        ics.pushCalendarEnd();
+
         ics.exportIcs();
     }
 }
 
-
-function StudentEvalution() {
-    // SetBtnZero();
-    console.log("done......");
-    // let trs = document.getElementById("tempGrid").getElementsByTagName("tr");
-    // console.log(trs);
-    // for(let i = 0; i < trs.length; ++i){
-    //     console.log("2333");
-    //     trs[i].onclick = function(){
-    //         console.log("???????????");
-    //         // ModifyHTML();
-    //         setTimeout(ModifyHTML(), 4000);
-    //         console.log("!!!!!!!!");
-    //     }
-    // }
-    ModifyHTML();
-
-    function ModifyHTML() {
-        console.log("modify...")
-        // 添加一个选择要批量打分的选择框
-        let panel_body1 = document.getElementsByClassName("panel panel-default")[1];
-        let panel_body2 = document.getElementsByClassName("panel-body")[3];
-        let blockquote = panel_body2.getElementsByTagName("blockquote")[0].cloneNode(true);
-        blockquote.getElementsByTagName("p")[0].innerText = "一键评价";
-        let table = panel_body2.getElementsByTagName("table")[0].cloneNode(true);
-        table.removeAttribute("data-pjzbxm_id");
-        table.removeAttribute("data-qzz");
-        let tbody = table.getElementsByTagName("tbody")[0];
-        let tr = tbody.getElementsByTagName("tr")[0];
-        while (tbody.getElementsByTagName("tr").length > 1) {
-            tbody.removeChild(tbody.getElementsByTagName("tr")[1]);
-        }
-        tr.removeAttribute("data-zsmbmcb_id");
-        tr.removeAttribute("data-pjzbxm_id");
-        tr.removeAttribute("data-pfdjdmb_id");
-        tr.getElementsByTagName("td")[0].innerText = "选择的最高分:";
-        let inputs = tr.getElementsByClassName("radio-pjf");
-        for (let i = 0; i < 5; ++i) {
-            // tds[i].getElementsByTagName("div")[0].getElementsByTagName("div")[0].getElementsByTagName("label")[0].getElementsByTagName("")
-            inputs[i].removeAttribute("name");
-            inputs[i].removeAttribute("data-pfdjdmxmb_id");
-            inputs[i].setAttribute("name", "StudentEvalution");
-        }
-        inputs[0].setAttribute("checked", "checked");
+//#endregion
 
 
-        // let btn = document.getElementsByClassName("btn-group")[1];
-        let btn = document.createElement("button");
-        btn.className = "btn btn-default";
-        let sp = document.createElement("span");
-        sp.className = "bigger-120 glyphicon glyphicon-ok";
-        btn.append(sp);
-        btn.append(" 一键评价");
-        btn.setAttribute("id", "btn_StudentEvalution");
-        btn.onclick = function () {
+//#region 一键评教
+function studentEvaluation() {
+    console.log("studentEvaluation");
+
+    // 添加批量打分的选择区域
+    let $panel_body1 = $(".panel.panel-default").eq(1);
+    let $panel_body2 = $(".panel-body").eq(3);
+    let $blockquote = $panel_body2.find("blockquote:first").clone();
+    $blockquote.find("p:first").text("一键评价");
+    let $table = $panel_body2.find("table:first").clone()
+        .removeAttr("data-pjzbxm_id")
+        .removeAttr("data-qzz");
+    let $tbody = $table.find("tbody:first");
+    let $tr = $tbody.find("tr:first");
+    $tbody.find("tr:gt(0)").remove();
+    $tr.removeAttr("data-zsmbmcb_id")
+        .removeAttr("data-pjzbxm_id")
+        .removeAttr("data-pfdjdmb_id");
+    $tr.find("td:first").text("选择的最高分:");
+    let $inputs = $tr.find(".radio-pjf");
+    $inputs.slice(0, 5)
+        .removeAttr("name")
+        .removeAttr("data-pfdjdmxmb_id")
+        .attr("name", "studentEvaluation");
+    $inputs.eq(0).attr("checked", "checked");
+
+    let $btn = $("<button>").addClass("btn btn-default").attr("id", "btn_studentEvaluation")
+        .append($("<span>").addClass("bigger-120 glyphicon glyphicon-ok"))
+        .append(" 一键评价")
+        .on("click", function () {
             let score = 5;
-            let checked = document.getElementsByName("StudentEvalution");
-            for (let i = 0; i < checked.length; ++i) {
-                if (checked[i].checked) {
-                    score = checked[i].getAttribute("data-dyf")
-                }
-            }
+            $("[name='studentEvaluation']").each(function () {
+                if ($(this).prop("checked")) score = $(this).attr("data-dyf");
+            });
             console.log("设置的最高分数为: " + score);
             score = 5 - score;
-            let inputs = document.getElementsByClassName("panel-body")[3].getElementsByTagName("input");
-            let flag = Math.round(Math.random() * (inputs.length / 5));
+            let $allInputs = $(".panel-body").eq(3).find("input");
+            let flag = Math.round(Math.random() * ($allInputs.length / 5));
             console.log(flag);
-            for (let i = score; i < inputs.length; i += 5) {
-                if (Math.round(i / 5) == flag) {
-                    inputs[i + 1].setAttribute("checked", "checked");
-                } else {
-                    inputs[i].setAttribute("checked", "checked");
-                }
+            for (let i = score; i < $allInputs.length; i += 5) {
+                $allInputs.eq(Math.round(i / 5) == flag ? i + 1 : i).attr("checked", "checked");
             }
-        }
-        let td = document.createElement("td");
-        td.appendChild(btn);
-
-        tr.appendChild(td);
-        panel_body1.prepend(table);
-        panel_body1.prepend(blockquote);
-
-
-    }
-
+        });
+    $tr.append($("<td>").append($btn));
+    $panel_body1.prepend($table).prepend($blockquote);
 }
 
+//#endregion
 
 
-// ----------------------------------------- 一些基础方法 ----------------------------------------------------//
-function SetBtnZero() {
-    // 没用，，，
-    let btn = document.getElementById("btn_yd");
-    btn.className = "btn btn-default btn-primary";
-    btn.removeAttribute("disabled");
-}
-
-// -------------------------------- ICS类，用于处理所有有关日历的操作 ------------------------------------------//
+//#region ICS 日历类
 var CRLF = "\n";
 var SPACE = " ";
 class ICS {
-
-    Calendar; // 日历参数
-    ics; // ics格式的日历，
-    res; // 最后格式化的结果
-
     constructor() {
-
-        // --------------------------------------------------------------------------
-        // 日历的一些主要参数，如PRODID、VERSION、CALSCALE、是否提醒以及提醒的时间
-        (function (Calendar) {
-            Calendar.PRODID = "-//31415926535x//ICalendar Exporter v1.0//CN";
-            Calendar.VERSION = "2.0";
-            Calendar.CALSCALE = "GREGORIAN"; // 历法，默认是公历
-            Calendar.TIMEZONE = "Asia/Shanghai"; // 时区，默认是上海
-            Calendar.ISVALARM = false; // 提醒，默认是开启
-            Calendar.VALARM = "-PT5M"; // 提醒，默认半小时
-            Calendar.WKST = "SU"; // 一周开始，默认是周日
-
-        })(this.Calendar || (this.Calendar = {}));
-        // --------------------------------------------------------------------------
-
-
-        this.ics = new Array();
-        this.ics.push("BEGIN:VCALENDAR");
-        this.ics.push("VERSION:" + this.Calendar.VERSION);
-        this.ics.push("PRODID:" + this.Calendar.PRODID);
-        this.ics.push("CALSCALE:" + this.Calendar.CALSCALE);
+        // 日历主要参数：PRODID、VERSION、CALSCALE、是否提醒及提醒时间
+        this.Calendar = {
+            VERSION: "2.0",
+            PRODID: "-//31415926535x Xiaolele_er 1208nn//GDJW2ICS v4.1.5//ZH-CN",
+            CALSCALE: "GREGORIAN", // 历法，默认公历
+            // TIMEZONE: "Asia/Shanghai", // 时区，默认上海
+            // ISVALARM: false, // 是否开启提醒，默认关闭
+            // VALARM: "-PT5M", // 提前提醒时间
+            // WKST: "SU", // 一周起始，默认周日
+        };
+        this.ics = [
+            "BEGIN:VCALENDAR",
+            "VERSION:" + this.Calendar.VERSION,
+            "PRODID:" + this.Calendar.PRODID,
+            "CALSCALE:" + this.Calendar.CALSCALE,
+            CRLF
+        ];
     }
 
     // 添加事件
     pushEvent(e) {
-        this.ics.push("BEGIN:VEVENT");
-        this.ics.push(e.getDTSTART());
-        this.ics.push(e.getDTEND());
-        if (e.isrrule == true) this.ics.push(e.getRRULE());
+        this.ics.push("BEGIN:VEVENT", e.getDTSTART(), e.getDTEND());
+        if (e.isrrule) this.ics.push(e.getRRULE());
         this.ics.push(e.getSUMMARY());
-        if (this.Calendar.ISVALARM == true) this.pushAlarm();
-        this.ics.push(e.getLOCATION());
-        this.ics.push(e.getDESCRIPTION());
-        this.ics.push("END:VEVENT");
-        this.ics.push(CRLF);
+        if (this.Calendar.ISVALARM) this.pushAlarm();
+        this.ics.push(e.getLOCATION(), e.getDESCRIPTION(), "END:VEVENT", "");
     }
 
     // 添加提醒
     pushAlarm() {
-        this.ics.push("BEGIN:VALARM");
-        this.ics.push("ACTION:DISPLAY");
-        this.ics.push("DESCRIPTION:This is an event reminder");
-        this.ics.push("TRIGGER:" + this.Calendar.VALARM);
-        this.ics.push("END:VALARM");
+        this.ics.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:This is an event reminder", "TRIGGER:" + this.Calendar.VALARM, "END:VALARM");
     }
 
-    // 添加日历末
-    pushCalendarEnd() {
-        this.ics.push("END:VCALENDAR");
-    }
-
-    // 对ics进行格式的处理，每行不超过75个字节，换行用CRLF，对于超出的进行换行，下一行行首用空格
+    // 格式化 ICS 文件内容，按照 ICS 规范每行不超过 75 字节，超过部分需要换行并在下一行开头添加一个空格
     getFixedIcs() {
-        this.res = "";
-        this.ics.forEach(line => {
-            if (line.length > 60) {
-                let len = line.length;
-                let index = 0;
-                while (len > 0) {
-                    for (let i = 0; i < index; ++i) {
-                        this.res += SPACE;
-                    }
-                    this.res += line.slice(0, 60) + CRLF;
-                    line = line.slice(61);
-                    len -= 60;
-                    ++index;
-                }
-                line = line.slice(0, 60);
-            }
-            this.res += line + CRLF;
-        });
-        return this.res;
+        const e = new TextEncoder();
+        return this.res = (this.ics.push("END:VCALENDAR"), this.ics.map(l => {
+            for (var r = []; e.encode(l).length > 75; r.push(l.slice(0, p)), l = SPACE + l.slice(p))
+                for (var p = l.length; p && e.encode(l.slice(0, p)).length > 75;) p--;
+            return (r.push(l), r.join(CRLF));
+        }).join(CRLF) + CRLF);
     }
-    // --------------------------------------------------------------------------
 
-
-    // --------------------------------------------------------------------------
-    // 导出ics
+    // 导出 ics 文件
     exportIcs() {
         this.getFixedIcs();
-        // 使用a标签模拟下载，blob实现流文件的下载链接转化
-        let link = window.URL.createObjectURL(new Blob([this.res], {
-            type: "text/x-vCalendar"
-        }));
-        let a = document.createElement("a");
-        a.setAttribute("href", link);
-        a.setAttribute("download", "courses.ics");
-        a.click(); // 模拟下载
+        // 使用 <a> 标签模拟下载，Blob 实现流文件的下载链接转化
+        $("<a>").attr({ href: URL.createObjectURL(new Blob([this.res], { type: "text/x-vCalendar" })), download: "courses.ics" })[0].click();
     }
-    // --------------------------------------------------------------------------
-    // -------------------------------- ICS ------------------------------------------//
-
-
 }
-// -------------------------------- ICS类，用于处理所有有关日历的操作 ------------------------------------------//
+
+//#endregion
+
+
+//#region ICS 事件类
 class ICSEvent {
-    constructor(DTSTART, DTEND, SUMMARY, LOCATION, DESCRIPTION) {
+    constructor(DTSTART, DTEND, SUMMARY, LOCATION = "", DESCRIPTION = "") {
         this.DTSTART = DTSTART;
         this.DTEND = DTEND;
         this.SUMMARY = SUMMARY;
-        this.LOCATION = (LOCATION == undefined) ? "" : LOCATION;
-        this.DESCRIPTION = (DESCRIPTION == undefined) ? "" : DESCRIPTION;
+        this.LOCATION = LOCATION;
+        this.DESCRIPTION = DESCRIPTION;
+        this.isrrule = false;
     }
-    isrrule = false;
-    RRULE;
     setRRULE(FREQ, WKST, COUNT, INTERVAL, BYDAY) {
         this.isrrule = true;
-        this.RRULE = "RRULE:FREQ=" + FREQ + ";WKST=" + WKST + ";COUNT=" + COUNT + ";INTERVAL=" + INTERVAL + ";BYDAY=" + BYDAY;
+        this.RRULE = `RRULE:FREQ=${FREQ};WKST=${WKST};COUNT=${COUNT};INTERVAL=${INTERVAL};BYDAY=${BYDAY}`;
     }
-    getRRULE() {
-        return "" + this.RRULE;
-    }
-    getDTSTART() {
-        return "DTSTART:" + this.DTSTART;
-    }
-    getDTEND() {
-        return "DTEND:" + this.DTEND;
-    }
-    getSUMMARY() {
-        return "SUMMARY:" + this.SUMMARY;
-    }
-    getLOCATION() {
-        return "LOCATION:" + this.LOCATION;
-    }
-    getDESCRIPTION() {
-        return "DESCRIPTION:" + this.DESCRIPTION;
-    }
+    getRRULE() { return this.RRULE; }
+    getDTSTART() { return "DTSTART:" + this.DTSTART; }
+    getDTEND() { return "DTEND:" + this.DTEND; }
+    getSUMMARY() { return "SUMMARY:" + this.SUMMARY; }
+    getLOCATION() { return "LOCATION:" + this.LOCATION; }
+    getDESCRIPTION() { return "DESCRIPTION:" + this.DESCRIPTION; }
 }
 
-// -------------------------------- ICS类，用于处理所有有关日历的操作 ------------------------------------------//
+//#endregion
