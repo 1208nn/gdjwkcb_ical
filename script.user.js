@@ -36,7 +36,7 @@ var classTimeTable = {
 var classScheduleToICSURL = "kbcx/xskbcx_cxXskbcxIndex.html"; // 学生课表查询页面，将该学期的课程信息导出为 ics
 var examScheduleToICSURL = "kwgl/kscx_cxXsksxxIndex.html";   // 考试信息查询页面，将该学期的考试信息导出为 ics
 var studentEvaluationURL = "xspjgl/kcgcpj_cxKcgcpjxxIndex.html"; // 学生评教页面
-
+var courseLocationPrefix = "浙江工业大学 ";
 var startDelay = 4000; // 脚本实际开始运行的延迟时间，网络不好建议调大，1000 等于 1s
 
 //#endregion
@@ -61,7 +61,6 @@ var startDelay = 4000; // 脚本实际开始运行的延迟时间，网络不好
 
 //#endregion
 
-
 //#region 课程表导出
 function classScheduleToICS() {
     console.log("classScheduleToICS");
@@ -74,7 +73,6 @@ function classScheduleToICS() {
     let $firstMondayLabel = $("<label>").css("float", "left")
         .append($("<span>").addClass("bigger-120 glyphicon glyphicon-time"))
         .append(" 开学首个星期一");
-
     let $firstMondaySelector = $("<input>", { type: "text" })
         .addClass("form-control")
         .css({ width: "150px", display: "inline-block", float: "left" })
@@ -82,13 +80,11 @@ function classScheduleToICS() {
             unsafeWindow.WdatePicker({ dateFmt: 'yyyy-MM-dd', readOnly: true, lang: 'zh-cn' });
         })
         .val((d => (d.setDate(d.getDate() - d.getDay() + 1), d))(new Date()).toISOString().split('T')[0]); // 默认为本周的星期一
-
     let $weekToggleBtn = $("<button>").addClass("btn btn-default btn-primary") // 默认启用
         .css("float", "left")
         .on("click", function () { $(this).toggleClass("btn-primary"); })
         .append($("<span>").addClass("bigger-120 glyphicon glyphicon-cog"))
         .append(" 在导出的课表内显示周数");
-
     let $exportBtn = $("<button>").addClass("btn btn-default")
         .css("float", "left")
         .on("click", function () {
@@ -100,7 +96,6 @@ function classScheduleToICS() {
         .append(" 导出课表");
 
     $(".btn-toolbar.pull-right").first().append($firstMondayLabel, $firstMondaySelector, $weekToggleBtn, $exportBtn);
-
     //#endregion
 
     // 本学期设定的开始日期
@@ -167,7 +162,7 @@ function classScheduleToICS() {
                         course.endWeek.push(endWeek);
                     });
                 } else if (title == "上课地点") {
-                    course.location = val;
+                    course.location = courseLocationPrefix + val;
                 } else if (title == "教师 ") {
                     // 注意教师后面有一个空格，可能是正方系统为了对齐做的格式调整，不能直接写 "教师"
                     course.teacher = val;
@@ -232,7 +227,6 @@ function classScheduleToICS() {
         res.exportIcs();
     }
 }
-
 //#endregion
 
 
@@ -299,9 +293,7 @@ function examScheduleToICS() {
         ics.exportIcs();
     }
 }
-
 //#endregion
-
 
 //#region 一键评教
 function studentEvaluation() {
@@ -349,9 +341,7 @@ function studentEvaluation() {
     $tr.append($("<td>").append($btn));
     $panel_body1.prepend($table).prepend($blockquote);
 }
-
 //#endregion
-
 
 //#region ICS 日历类
 var CRLF = "\n";
@@ -408,9 +398,7 @@ class ICS {
         $("<a>").attr({ href: URL.createObjectURL(new Blob([this.res], { type: "text/x-vCalendar" })), download: "courses.ics" })[0].click();
     }
 }
-
 //#endregion
-
 
 //#region ICS 事件类
 class ICSEvent {
@@ -433,5 +421,4 @@ class ICSEvent {
     getLOCATION() { return "LOCATION:" + this.LOCATION; }
     getDESCRIPTION() { return "DESCRIPTION:" + this.DESCRIPTION; }
 }
-
 //#endregion
