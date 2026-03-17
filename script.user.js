@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         浙工大-正方教务系统导出课程表
 // @namespace    https://github.com/xlle-er/gdjwkcb_ical
-// @version      4.1.5
+// @version      4.1.6
 // @description  通过对正方教务系统的课表页面的解析，实现导出一个适用于大部分 ics 日历的文件
 // @author       Xiaolele_er & 1208nn (修改自 31415926535x )
 // @supportURL   https://github.com/xlle-er/gdjwkcb_ical/issues
 // @license      MIT
 // @include      *://www.gdjw.zjut.edu.cn/jwglxt*
+// @include      *://www.gdjwjf.zjut.edu.cn/jwglxt*
 // @run-at       document-end
 // @downloadURL  https://github.com/xlle-er/gdjwkcb_ical/raw/main/script.user.js
 // @updateURL    https://github.com/xlle-er/gdjwkcb_ical/raw/main/script.user.js
